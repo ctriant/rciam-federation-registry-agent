@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+
+import json, time
+import subprocess
+import argparse
+import requests
+import logging
+from Utils.common import get_log_conf, create_ams_response
+from Utils.xrdparser import XRDParser
+from ServiceRegistryAms.PullPublish import PullPublish
+
+log = logging.getLogger(__name__)
+
+'''
+This function will update the XRD metadata repository according to the incoming messages 
+and will return a list with the update result for each distict message.
+    Function update_data gets one argument:
+    - messages, the new incoming messages in json
+'''
+def update_metadata_repository( messages ):
+    args = {"id": "", "url":"", "rel": "urn:oasis:names:tc:SAML:2.0:metadata"}
+    responses = []
+    for msg in messages:
+        response = {"id": msg['id']}
+        if msg['deployment_type'] == 'create':
+            log.info('Create service: ' + str(msg['id']))
+            args['id'] = msg['entity_id']
+            args['url'] = msg['metadata_url']
+            try:
+                xrdparser.append(**args)
+            except RuntimeError:
+                response["state"] = "error"
+                responses.append(response)
+            else:
+                response["state"] = "deployed"
+                responses.append(response)
+        elif msg['deployment_type'] == 'edit':
+            log.info('Update service: ' + str(msg['id']))
+            args['id'] = msg['entity_id']
+            args['url'] = msg['metadata_url']
+            args['service_name'] = msg['service_name']
+            try:
+                xrdparser.update(**args)
+            except RuntimeError:
+                response["state"] = "error"
+                responses.append(response)
+            else:
+                response["state"] = "deployed"
+                responses.append(response)
+        elif msg['deployment_type'] == 'delete':
+            log.info('Delete service: ' + str(msg['id']))
+            try:
+                xrdparser.delete(msg['entity_id'])
+            except RuntimeError:
+                response["state"] = "error"
+                responses.append(response)
+            else:
+                response["state"] = "deployed"
+                responses.append(response)
+    return responses
+
+def publish_ams(ams_agent, response, messages, agent_id):
+    pub_messages = []
+    for message in messages:
+        msg = create_ams_response(response, message['id'], agent_id, -1, '')
+        pub_messages.append({'attributes':{},'data': msg})
+    print(pub_messages)
+    ams_agent.publish(pub_messages)
+
+
+if __name__ == '__main__':
+    # Get config path from arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c', required=True, type=str, help="Script configuration file path")
+    args = parser.parse_args()
+    path = args.c
+    with open(path) as json_data_file:
+        config = json.load(json_data_file)
+    
+    xrdparser = XRDParser(config['saml']['metadata_conf_file'])
+
+    # Get log_conf from project arguments else use the global setting
+    if 'log_conf' in config['saml']:
+        get_log_conf(config['saml']['log_conf'])
+    else:
+        get_log_conf(config['log_conf'])
+
+    log.info('Init ams agent')
+    #ams = PullPublish(config['ssp']['ams'])
+
+    # services_json = get_services_from_conf(config['ssp']['metadata_conf_file'])
+    # Get messages
+    with open('/home/ctriant/messages.json') as json_file:
+        messages = json.load(json_file)
+
+    # while True:
+    for x in range(1):
+        log.info('Pull messages from ams')
+        #messages, ids = ams.pull(1)
+        #ams.ack(ids)
+        log.info('Received ' + str(len(messages)) +' messages from ams')
+        log.debug('Messages:' + str(messages))
+        if len(messages)>0:
+            responses = update_metadata_repository(messages)
+            for idx in range(len(messages)):
+                responses[idx]["agent_id"] = config["saml"]["ams"]["agent_id"]
+            # generate_config(services_json, config['ssp']['metadata_conf_file'])
+            # response = call_ssp_syncer(config['ssp']['cron_url'], config['ssp']['cron_secret'], config['ssp']['request_timeout'], config['ssp']['cron_tag'])
+            #publish_ams(ams, response, messages, config['ssp']['ams']['agent_id'])
+        # Change this to pyFF interval
+        # time.sleep(config['ssp']['ams']['poll_interval'])
+        print(responses)
+    log.info('Exit script')
