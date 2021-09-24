@@ -61,13 +61,17 @@ class XRDParser:
         
         if kwargs.get("id"):
             for node in root.xpath(f".//XRD[contains(@id,'{kwargs['id']}')]"):
-                if kwargs.get("url"):
-                    node[1].attrib["href"] = kwargs['url']
-                else:
+                try:
+                    link = node.xpath(f".//Link")
+                    if kwargs.get("url"):
+                        link[0].attrib["href"] = kwargs['url']
+                except:
                     raise RuntimeError("Missing metadata URL")
-                if kwargs.get("entity_id"):
-                    node[0].text = kwargs['entity_id']
-                else:
+                try:
+                    subject = node.xpath(f".//Subject")
+                    if kwargs.get("entity_id"):
+                        subject[0].text = kwargs['entity_id']
+                except:
                     raise RuntimeError("Missing metadata EntityID")
 
             tree.write(self.infile,

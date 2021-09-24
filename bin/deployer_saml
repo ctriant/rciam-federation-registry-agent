@@ -32,6 +32,7 @@ def update_metadata_repository( messages, agent_id):
                 xrdparser.append(**args)
             except RuntimeError:
                 response["state"] = "error"
+                response["status"] = 500
                 responses.append(response)
             else:
                 response["state"] = "deployed"
@@ -46,6 +47,7 @@ def update_metadata_repository( messages, agent_id):
                 xrdparser.update(**args)
             except RuntimeError:
                 response["state"] = "error"
+                response["status"] = 500
                 responses.append(response)
             else:
                 response["state"] = "deployed"
@@ -56,6 +58,7 @@ def update_metadata_repository( messages, agent_id):
                 xrdparser.delete(str(msg['id']))
             except RuntimeError:
                 response["state"] = "error"
+                response["status"] = 500
                 responses.append(response)
             else:
                 response["state"] = "deployed"
