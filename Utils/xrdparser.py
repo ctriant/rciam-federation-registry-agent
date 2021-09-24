@@ -37,7 +37,7 @@ class XRDParser:
                 xrd = etree.Element("XRD")
                 xrd.attrib["id"] = kwargs['id']
                 subject = etree.Element("Subject")
-                subject.text = kwargs['id']
+                subject.text = kwargs['entity_id']
                 link = etree.Element("Link")
                 link.text = kwargs.get("text")
                 if kwargs.get("rel"):
@@ -65,6 +65,10 @@ class XRDParser:
                     node[1].attrib["href"] = kwargs['url']
                 else:
                     raise RuntimeError("Missing metadata URL")
+                if kwargs.get("entity_id"):
+                    node[0].text = kwargs['entity_id']
+                else:
+                    raise RuntimeError("Missing metadata EntityID")
 
             tree.write(self.infile,
                 pretty_print=True, xml_declaration=True, encoding='UTF-8')

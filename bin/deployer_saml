@@ -17,14 +17,16 @@ and will return a list with the update result for each distict message.
     Function update_data gets one argument:
     - messages, the new incoming messages in json
 '''
-def update_metadata_repository( messages ):
-    args = {"id": "", "url":"", "rel": "urn:oasis:names:tc:SAML:2.0:metadata"}
+def update_metadata_repository( messages, agent_id):
+    args = {"id": "", "url":"", "rel": "urn:oasis:names:tc:SAML:2.0:metadata",
+            "agent_id": agent_id}
     responses = []
     for msg in messages:
-        response = {"id": msg['id']}
+        response = {"id": msg['id'], "agent_id": agent_id, "status": 200}
         if msg['deployment_type'] == 'create':
             log.info('Create service: ' + str(msg['id']))
-            args['id'] = msg['entity_id']
+            args['id'] = str(msg['id'])
+            args['entity_id'] = msg['entity_id']
             args['url'] = msg['metadata_url']
             try:
                 xrdparser.append(**args)
@@ -36,7 +38,8 @@ def update_metadata_repository( messages ):
                 responses.append(response)
         elif msg['deployment_type'] == 'edit':
             log.info('Update service: ' + str(msg['id']))
-            args['id'] = msg['entity_id']
+            args['id'] = str(msg['id'])
+            args['entity_id'] = msg['entity_id']
             args['url'] = msg['metadata_url']
             args['service_name'] = msg['service_name']
             try:
@@ -50,7 +53,7 @@ def update_metadata_repository( messages ):
         elif msg['deployment_type'] == 'delete':
             log.info('Delete service: ' + str(msg['id']))
             try:
-                xrdparser.delete(msg['entity_id'])
+                xrdparser.delete(str(msg['id']))
             except RuntimeError:
                 response["state"] = "error"
                 responses.append(response)
@@ -59,10 +62,10 @@ def update_metadata_repository( messages ):
                 responses.append(response)
     return responses
 
-def publish_ams(ams_agent, response, messages, agent_id):
+def publish_ams(ams_agent, responses, messages, agent_id):
     pub_messages = []
-    for message in messages:
-        msg = create_ams_response(response, message['id'], agent_id, -1, '')
+    for idx, message in enumerate(messages):
+        msg = create_ams_response(responses[idx], message['id'], agent_id, -1, '')
         pub_messages.append({'attributes':{},'data': msg})
     print(pub_messages)
     ams_agent.publish(pub_messages)
@@ -86,28 +89,26 @@ if __name__ == '__main__':
         get_log_conf(config['log_conf'])
 
     log.info('Init ams agent')
-    #ams = PullPublish(config['ssp']['ams'])
+    ams = PullPublish(config['saml']['ams'])
 
     # services_json = get_services_from_conf(config['ssp']['metadata_conf_file'])
     # Get messages
-    with open('/home/ctriant/messages.json') as json_file:
-        messages = json.load(json_file)
+    #with open('/home/ctriant/messages.json') as json_file:
+    #    messages = json.load(json_file)
 
-    # while True:
-    for x in range(1):
-        log.info('Pull messages from ams')
-        #messages, ids = ams.pull(1)
-        #ams.ack(ids)
-        log.info('Received ' + str(len(messages)) +' messages from ams')
-        log.debug('Messages:' + str(messages))
-        if len(messages)>0:
-            responses = update_metadata_repository(messages)
-            for idx in range(len(messages)):
-                responses[idx]["agent_id"] = config["saml"]["ams"]["agent_id"]
+    while True:
+        messages, ids = ams.pull(1) 
+        if len(messages)>0:  
+            log.info('Pull messages from ams')
+            ams.ack(ids)
+            log.info('Received ' + str(len(messages)) +' messages from ams')
+            log.info('Messages:' + str(messages) + str(ids))
+            responses = update_metadata_repository(messages,
+                                                   config["saml"]["ams"]["agent_id"])
             # generate_config(services_json, config['ssp']['metadata_conf_file'])
-            # response = call_ssp_syncer(config['ssp']['cron_url'], config['ssp']['cron_secret'], config['ssp']['request_timeout'], config['ssp']['cron_tag'])
-            #publish_ams(ams, response, messages, config['ssp']['ams']['agent_id'])
+            # response = call_ssp_syncer(config['saml']['cron_url'], config['ssp']['cron_secret'], config['ssp']['request_timeout'], config['ssp']['cron_tag'])
+            publish_ams(ams, responses, messages, config['saml']['ams']['agent_id'])
         # Change this to pyFF interval
-        # time.sleep(config['ssp']['ams']['poll_interval'])
-        print(responses)
+            time.sleep(config['saml']['ams']['poll_interval'])
+            print(responses)
     log.info('Exit script')
